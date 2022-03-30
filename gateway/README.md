@@ -1,6 +1,6 @@
 # 查询代理网关
 
-service module
+> type: service module
 
 用户的每次连续查询都会启动一个对应的查询代理网关，保持websocket链接
 本地会建立一个dns缓存，缓存对应区域的index actor id

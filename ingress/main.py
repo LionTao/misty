@@ -5,10 +5,10 @@ from datetime import datetime
 from typing import List
 
 from dapr.actor import ActorProxy, ActorId
-
-from interfaces.my_types import TrajectoryPoint
-from interfaces.trajectory_assembler_interface import TrajectoryAssemblerInterface
 from split import chop
+
+from interfaces.trajectory_assembler_interface import TrajectoryAssemblerInterface
+from interfaces.types import TrajectoryPoint
 
 
 def str_to_TrajectoryPoint(s: str) -> TrajectoryPoint:
@@ -17,8 +17,8 @@ def str_to_TrajectoryPoint(s: str) -> TrajectoryPoint:
         p = TrajectoryPoint(
             id=int(data_list[0]),
             time=datetime.strptime(data_list[1], "%Y-%m-%d %H:%M:%S"),
-            x=float(data_list[2]),
-            y=float(data_list[3])
+            lng=float(data_list[2]),
+            lat=float(data_list[3])
         )
         return p
     except Exception as e:

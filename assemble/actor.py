@@ -8,8 +8,8 @@ from dapr.actor import Actor
 from dapr.actor.id import ActorId
 from dapr.actor.runtime.context import ActorRuntimeContext
 
-from interfaces.my_types import TrajectoryPoint
 from interfaces.trajectory_assembler_interface import TrajectoryAssemblerInterface
+from interfaces.types import TrajectoryPoint
 
 
 class TrajectoryAssemblerActor(Actor, TrajectoryAssemblerInterface):
@@ -17,6 +17,7 @@ class TrajectoryAssemblerActor(Actor, TrajectoryAssemblerInterface):
         super().__init__(ctx, actor_id)
         self.PREVIOUS_POINT_STATE_KEY = f"previous_point_{self.id}"
         self.TRAJECTORY_STATE_KEY = f"trajectory_{self.id}"
+
         self.previous_point: Optional[TrajectoryPoint] = None
         self.trajectory: Optional[List[TrajectoryPoint]] = None
         self.logger = Logger.with_default_handlers(name=f"TrajectoryAssembler_{self.id}", level=LogLevel.INFO)
@@ -36,7 +37,7 @@ class TrajectoryAssemblerActor(Actor, TrajectoryAssemblerInterface):
             await self.__save_previous_point(p)
             await self.__save_trajectory([p])
 
-    async def __retrive_previous_point(self) -> Optional[TrajectoryPoint]:
+    async def __retrieve_previous_point(self) -> Optional[TrajectoryPoint]:
         has_value, p = await self._state_manager.try_get_state(self.PREVIOUS_POINT_STATE_KEY)
         if has_value:
             val: TrajectoryPoint = from_dict(TrajectoryPoint, p)
@@ -57,7 +58,7 @@ class TrajectoryAssemblerActor(Actor, TrajectoryAssemblerInterface):
         await self._state_manager.set_state(self.TRAJECTORY_STATE_KEY, list(map(asdict, self.trajectory)))
         await self._state_manager.save_state()
 
-    async def __retrive_trajectory(self) -> Optional[List[TrajectoryPoint]]:
+    async def __retrieve_trajectory(self) -> Optional[List[TrajectoryPoint]]:
         has_value, val = await self._state_manager.try_get_state(self.TRAJECTORY_STATE_KEY)
         if has_value:
             self.trajectory = list(map(lambda x: from_dict(TrajectoryPoint, x), val))
@@ -68,8 +69,8 @@ class TrajectoryAssemblerActor(Actor, TrajectoryAssemblerInterface):
             return None
 
     async def _on_activate(self) -> None:
-        await self.__retrive_previous_point()
-        await self.__retrive_trajectory()
+        await self.__retrieve_previous_point()
+        await self.__retrieve_trajectory()
         self.logger.info(f"{self.id}_TrajectoryAssembler activated")
 
     async def _on_deactivate(self) -> None:

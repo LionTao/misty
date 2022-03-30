@@ -1,5 +1,7 @@
 # 索引元数据服务
 
+> type: service module
+
 存储索引元数据的service
 
 ## 功能

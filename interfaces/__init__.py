@@ -1,1 +1,1 @@
-__all__ = ['my_types']
+__all__ = ['types.py']

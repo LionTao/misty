@@ -1,6 +1,6 @@
 # 轨迹分布式索引
 
-actor module
+> type: actor module
 
 传统单实例RTree并行性和插入性能较差且如果轨迹较长的话剪枝能力就会下降，本模块旨在解决上述问题
 
