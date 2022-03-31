@@ -1,5 +1,7 @@
 import asyncio
 import multiprocessing
+import os
+import sys
 from dataclasses import asdict
 from datetime import datetime
 from typing import List
@@ -7,6 +9,8 @@ from typing import List
 from dapr.actor import ActorProxy, ActorId
 from split import chop
 
+sys.path.append(os.curdir)
+print(sys.path)
 from interfaces.trajectory_assembler_interface import TrajectoryAssemblerInterface
 from interfaces.types import TrajectoryPoint
 
@@ -55,7 +59,7 @@ def run_loop(ids: List[int]):
 
 
 def main():
-    pool = multiprocessing.Pool(processes=5)
+    pool = multiprocessing.Pool(processes=3)
     pool.imap_unordered(run_loop, list(chop(10, range(1, 10358))))
     pool.close()
     pool.join()

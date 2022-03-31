@@ -5,7 +5,7 @@ from dapr.actor import ActorInterface, actormethod
 
 class DistributedIndexInterface(ActorInterface):
     @actormethod(name="AcceptNewSegment")
-    async def accept_new_segment(self, segment: dict) -> None:
+    async def accept_new_segment(self, segment: dict) -> bool:
         ...
 
     @actormethod(name="InitializeAsANewChildRegion")

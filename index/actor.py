@@ -1,6 +1,6 @@
 import asyncio
-import json
 import os
+import traceback
 from collections import defaultdict
 from dataclasses import asdict
 from typing import Optional, List, Dict
@@ -11,11 +11,11 @@ from aiologger.levels import LogLevel
 from dacite import from_dict
 from dapr.actor import Actor, ActorId, ActorProxy
 from dapr.actor.runtime.context import ActorRuntimeContext
-from dapr.clients import DaprClient
 from geopandas import GeoDataFrame
 from shapely.geometry import LineString, box
 
 from interfaces.distributed_index_interface import DistributedIndexInterface
+from interfaces.index_meta_interface import IndexMetaInterface
 from interfaces.types import TrajectorySegment, MBR, TrajectoryPoint
 
 # buffer里最大存储数量
@@ -23,7 +23,7 @@ MAX_BUFFER_SIZE = os.getenv("MAX_BUFFER_SIZE", 10)
 # buffer里数量:树里的数量
 TREE_INSERTION_THRESHOLD = os.getenv("TREE_INSERTION_THRESHOLD", 0.5)
 # 分裂所需的树索引阈值
-SPLIT_THRESHOLD = os.getenv("SPLIT_THRESHOLD", 200)
+SPLIT_THRESHOLD = os.getenv("SPLIT_THRESHOLD", 20)
 
 
 class DistributedIndexActor(Actor, DistributedIndexInterface):
@@ -78,15 +78,23 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
         """
         接受一个轨迹段并先插入buffer
         """
-        if self.retired:
+        try:
+            if self.retired:
+                return False
+            s: TrajectorySegment = from_dict(TrajectorySegment, segment)
+            if self.cache:
+                self.cache.append(s)
+            else:
+                self.cache = [s]
+            self._check_insertion()
+            self.logger.info(
+                f"Buffer: {len(self.cache) if self.cache else 0}, Tree: {len(self.segments) if self.segments is not None else 0}")
+            await self._check_split()
+            return True
+        except Exception as e:
+            traceback.print_tb(e.__traceback__)
+            print("error:", str(e), flush=True)
             return False
-        s: TrajectorySegment = from_dict(TrajectorySegment, segment)
-        if self.cache:
-            self.cache.append(s)
-        else:
-            self.cache = [s]
-        self._check_insertion()
-        return True
 
     def _check_insertion(self):
         """
@@ -100,8 +108,8 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
         进行合并
         """
         gdf = self._cache_to_gdf()
-        if self.segments:
-            self.segments = self.segments.append(gdf)
+        if self.segments is not None:
+            self.segments = self.segments.append(gdf, ignore_index=True)
         else:
             self.segments = gdf
         self.cache = None
@@ -118,14 +126,15 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
 
     def _need_insertion(self) -> bool:
         return len(self.cache) > MAX_BUFFER_SIZE or (
-                self.segments and (len(self.cache) / len(self.segments)) > TREE_INSERTION_THRESHOLD)
+                self.segments is not None and (len(self.cache) / len(self.segments)) > TREE_INSERTION_THRESHOLD)
 
-    async def initialize_as_a_new_child_region(self, segments: List[dict]):
+    async def initialize_as_a_new_child_region(self, segments: List[dict]) -> bool:
         """
         接受母亲那来的一堆轨迹段进行初始化
         """
         self.cache = list(map(lambda x: from_dict(TrajectorySegment, x), segments))
         self._check_insertion()
+        return True
 
     async def query(self, mbr: dict, threshold: float) -> List[int]:
         """
@@ -136,7 +145,7 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
         # TODO: 转换墨卡托投影
         res = set()
         mbr = from_dict(MBR, mbr)
-        if self.segments:
+        if self.segments is not None:
             ids = self.segments.sindex.query(box(mbr.minX, mbr.minY, mbr.maxX, mbr.maxY))
             if ids:
                 res.update(ids)
@@ -155,7 +164,7 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
             self._do_insertion()
             # 1. 切分数据到7个子区块
             children_resolution: int = self.resolution + 1
-            children = h3.h3_to_children(self.h, children_resolution)
+            children: set = h3.h3_to_children(self.h, children_resolution)
             buckets: Dict[str, List[TrajectorySegment]] = defaultdict(lambda: list())
             for s in self.segments["obj"]:
                 start: TrajectoryPoint = s.start
@@ -170,22 +179,22 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
             # 2. 初始化7个子区块
             coroutines = [self._childbirth(k, v) for k, v in buckets.items()]
             await asyncio.gather(*coroutines)
-            self.retired = True
 
             # 3. 更新meta服务
-            with DaprClient() as d:
-                # invoke a method (gRPC or HTTP GET)
-                data = {
-                    "mother": self.id,
-                    "children": children
-                }
-                resp = d.invoke_method('index-meta', 'region-split', data=json.dumps(data))
-                self.logger.info(resp.text())
+            data = {
+                "mother": self.id.id,
+                "children": list(children)
+            }
+            meta_proxy = ActorProxy.create('IndexMetaActor', ActorId("0"), IndexMetaInterface)
+            resp: str = await meta_proxy.RegionSplit(data)
+            self.logger.info(resp)
+            self.retired = True
 
     @staticmethod
     async def _childbirth(h: str, segments: List[TrajectorySegment]) -> bool:
         proxy = ActorProxy.create('DistributedIndexActor', ActorId(h), DistributedIndexInterface)
-        return proxy.initialize_as_a_new_child_region(list(map(asdict, segments)))
+        return proxy.InitializeAsANewChildRegion(list(map(asdict, segments)))
 
     def _need_split(self) -> bool:
-        return self.resolution < 15 and len(self.segments) > SPLIT_THRESHOLD
+        l = len(self.segments) if self.segments is not None else 0
+        return self.resolution < 15 and l > SPLIT_THRESHOLD
