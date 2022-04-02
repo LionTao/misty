@@ -39,12 +39,14 @@ async def send_one_point(s: str, proxy: ActorProxy):
 
 async def worker(id: int):
     try:
+        print("sending", id, flush=True)
         proxy = ActorProxy.create('TrajectoryAssemblerActor', ActorId(str(id)), TrajectoryAssemblerInterface)
         with open(f"/mnt/g/Data/tdrive/taxi_log_2008_by_id/{id}.txt", 'r', encoding="utf-8") as f:
             s = f.readline()
             while s:
                 await send_one_point(s, proxy)
                 s = f.readline()
+        print(id, " done", flush=True)
         return 0
     except Exception as e:
         print(id, "failed", flush=True)
@@ -59,10 +61,13 @@ def run_loop(ids: List[int]):
 
 
 def main():
-    pool = multiprocessing.Pool(processes=3)
-    pool.imap_unordered(run_loop, list(chop(10, range(1, 10358))))
+    pool = multiprocessing.Pool(processes=5)
+    pool.imap_unordered(run_loop, list(chop(2, range(1, 10358))))
     pool.close()
     pool.join()
+    # for i in range(1, 10358):
+    #     await worker(i)
 
 
 main()
+# asyncio.get_event_loop().run_until_complete()

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from math import inf
 
 
-@dataclass
+@dataclass(eq=True, frozen=True)
 class TrajectoryPoint:
     id: int = inf
     time: datetime.datetime = datetime.datetime.now()
@@ -11,14 +11,14 @@ class TrajectoryPoint:
     lat: float = inf
 
 
-@dataclass
+@dataclass(eq=True, frozen=True)
 class TrajectorySegment:
     id: int = inf
     start: TrajectoryPoint = None
     end: TrajectoryPoint = None
 
 
-@dataclass
+@dataclass(eq=True, frozen=True)
 class MBR:
     minX = inf
     minY = inf
