@@ -5,7 +5,7 @@ from math import inf
 
 @dataclass(eq=True, frozen=True)
 class TrajectoryPoint:
-    id: int = inf
+    id: str = ""
     time: datetime.datetime = datetime.datetime.now()
     lng: float = inf
     lat: float = inf
@@ -13,14 +13,6 @@ class TrajectoryPoint:
 
 @dataclass(eq=True, frozen=True)
 class TrajectorySegment:
-    id: int = inf
+    id: str = ""
     start: TrajectoryPoint = None
     end: TrajectoryPoint = None
-
-
-@dataclass(eq=True, frozen=True)
-class MBR:
-    minX = inf
-    minY = inf
-    maxX = inf
-    maxY = inf

@@ -6,6 +6,7 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import List
 
+from asyncio_throttle import Throttler
 from dapr.actor import ActorProxy, ActorId
 from split import chop
 
@@ -19,7 +20,7 @@ def str_to_TrajectoryPoint(s: str) -> TrajectoryPoint:
     data_list = s.strip().split(",")
     try:
         p = TrajectoryPoint(
-            id=int(data_list[0]),
+            id=data_list[0],
             time=datetime.strptime(data_list[1], "%Y-%m-%d %H:%M:%S"),
             lng=float(data_list[2]),
             lat=float(data_list[3])
@@ -28,23 +29,32 @@ def str_to_TrajectoryPoint(s: str) -> TrajectoryPoint:
     except Exception as e:
         print("current:", s, flush=True)
         return TrajectoryPoint(
-            0, datetime.now(), 0, 0
+            "-1", datetime.now(), 0, 0
         )
 
 
-async def send_one_point(s: str, proxy: ActorProxy):
+async def send_one_point(s: str, id: int) -> bool:
     p: TrajectoryPoint = str_to_TrajectoryPoint(s)
-    await proxy.AcceptNewPoint(asdict(p))
+    proxy = ActorProxy.create('TrajectoryAssemblerActor', ActorId(str(id)), TrajectoryAssemblerInterface)
+    return await proxy.AcceptNewPoint(asdict(p))
 
 
-async def worker(id: int):
+async def worker(id: int, throttler: Throttler):
     try:
         print("sending", id, flush=True)
-        proxy = ActorProxy.create('TrajectoryAssemblerActor', ActorId(str(id)), TrajectoryAssemblerInterface)
-        with open(f"/mnt/g/Data/tdrive/taxi_log_2008_by_id/{id}.txt", 'r', encoding="utf-8") as f:
+
+        with open(f"/home/liontao/data/taxi_log_2008_by_id/{id}.txt", 'r', encoding="utf-8") as f:
             s = f.readline()
             while s:
-                await send_one_point(s, proxy)
+                async with throttler:
+                    resp = await send_one_point(s, id)
+                c = 1
+                while not resp:
+                    await asyncio.sleep(0.01)
+                    resp = await send_one_point(s, id)
+                    c += 1
+                    if c % 10 == 0:
+                        print(f"{id}: tried for {c} times!", flush=True)
                 s = f.readline()
         print(id, " done", flush=True)
         return 0
@@ -55,8 +65,9 @@ async def worker(id: int):
 
 
 def run_loop(ids: List[int]):
+    throttler = Throttler(rate_limit=500, period=1, retry_interval=0.001)
     loop = asyncio.get_event_loop()
-    loops = [loop.create_task(worker(id)) for id in ids]
+    loops = [loop.create_task(worker(i, throttler)) for i in ids]
     loop.run_until_complete(asyncio.wait(loops))
 
 

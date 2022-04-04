@@ -3,7 +3,7 @@ import traceback
 import warnings
 from collections import defaultdict
 from dataclasses import asdict
-from typing import Optional, List, Dict, Set
+from typing import Optional, List, Dict, Set, Tuple
 
 import aiorwlock
 import h3
@@ -14,20 +14,22 @@ from dacite import from_dict
 from dapr.actor import Actor, ActorId, ActorProxy
 from dapr.actor.runtime.context import ActorRuntimeContext
 from geopandas import GeoDataFrame
-from shapely.geometry import LineString, box
+from pyproj import Transformer
+from shapely import wkt
+from shapely.geometry import LineString
 
 from interfaces.distributed_index_interface import DistributedIndexInterface
 from interfaces.index_meta_interface import IndexMetaInterface
-from interfaces.types import TrajectorySegment, MBR, TrajectoryPoint
+from interfaces.types import TrajectorySegment, TrajectoryPoint
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # buffer里最大存储数量
-MAX_BUFFER_SIZE = os.getenv("MAX_BUFFER_SIZE", 500)
+MAX_BUFFER_SIZE = os.getenv("MAX_BUFFER_SIZE", 200)
 # buffer里数量:树里的数量
 TREE_INSERTION_THRESHOLD = os.getenv("TREE_INSERTION_THRESHOLD", 0.5)
 # 分裂所需的树索引阈值
-SPLIT_THRESHOLD = os.getenv("SPLIT_THRESHOLD", 2000)
+SPLIT_THRESHOLD = os.getenv("SPLIT_THRESHOLD", 500)
 
 
 class DistributedIndexActor(Actor, DistributedIndexInterface):
@@ -38,8 +40,8 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
     def __init__(self, ctx: ActorRuntimeContext, actor_id: ActorId):
         super().__init__(ctx, actor_id)
 
-        self.STATE_KEY = f"DistributedIndexActor_{self.id}"
-        self.RETIRED_KRY = f"DistributedIndexActor_{self.id}_retired"
+        self.STATE_KEY = f"DistributedIndexActor_{self.id.id}"
+        self.RETIRED_KRY = f"DistributedIndexActor_{self.id.id}_retired"
 
         self.retired: bool = False
 
@@ -48,12 +50,15 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
         # 当前的分辨率
         self.resolution: int = h3.h3_get_resolution(self.h)
 
+        # 球面坐标转墨卡托平面投影
+        self.transformer = Transformer.from_crs(4326, 3857, always_xy=True)
+
         # str-tree索引
         self.segments: Optional[GeoDataFrame] = None
         # Buffer
         self.cache: Optional[Set[TrajectorySegment]] = None
 
-        self.logger = Logger.with_default_handlers(name=f"DistributedIndex_{self.id}", level=LogLevel.INFO,
+        self.logger = Logger.with_default_handlers(name=f"DistributedIndex_{self.id.id}", level=LogLevel.INFO,
                                                    formatter=Formatter("%(name)s-%(asctime)s: %(message)s"))
 
         self.lock = aiorwlock.RWLock()
@@ -71,25 +76,24 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
             val: bool = p
             self.retired = val
             if self.retired:
-                self.logger.warn(f"Why wake {self.id.id}_region up?")
-        self.logger.info(f"{self.id}_region activated")
+                await self.logger.warn(f"Why wake {self.id.id}_region up?")
+        await self.logger.info(f"{self.id}_region activated")
 
     async def _on_deactivate(self) -> None:
         self._do_insertion()
         await self._state_manager.set_state(self.STATE_KEY, [asdict(i) for i in self.segments["obj"]])
         await self._state_manager.set_state(self.RETIRED_KRY, self.retired)
         await self._state_manager.save_state()
-        self.logger.info("State stored")
-        await self.logger.shutdown()
+        await self.logger.info("State stored")
 
-    async def accept_new_segment(self, segment: dict) -> bool:
-        async with self.lock.writer_lock:
-            """
-                    接受一个轨迹段并先插入buffer
-                    """
-            try:
-                if self.retired:
-                    return False
+    async def accept_new_segment(self, segment: dict) -> Tuple[bool, int]:
+        """
+        接受一个轨迹段并先插入buffer
+        """
+        try:
+            if self.retired:
+                return False, self.resolution + 1
+            async with self.lock.writer_lock:
                 s: TrajectorySegment = from_dict(TrajectorySegment, segment)
                 if self.cache:
                     self.cache.add(s)
@@ -98,11 +102,11 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
                 await self._check_insertion()
                 # self.logger.info(
                 #     f"Buffer: {len(self.cache) if self.cache else 0}, Tree: {len(self.segments) if self.segments is not None else 0}")
-                return True
-            except Exception as e:
-                traceback.print_exc()
-                print("!error:", str(e), e.__context__, flush=True)
-                return False
+                return True, self.resolution
+        except Exception as e:
+            traceback.print_exc()
+            print("!error:", str(e), e.__context__, flush=True)
+            return False, self.resolution
 
     async def _check_insertion(self):
         """
@@ -131,11 +135,12 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
         """
         # TODO: 转换墨卡托投影
         if self.cache is not None:
-            d = [{"id": i.id, "obj": i, "geometry": LineString([[i.start.lng, i.start.lat], [i.end.lng, i.end.lat]])}
+            d = [{"id": i.id, "obj": i, "geometry": LineString([self.transformer.transform(i.start.lng, i.start.lat),
+                                                                self.transformer.transform(i.end.lng, i.end.lat)])}
                  for i
                  in
                  self.cache]
-            return GeoDataFrame(d, crs="EPSG:4326")
+            return GeoDataFrame(d, crs="EPSG:3857")
         else:
             return None
 
@@ -154,33 +159,37 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
         await self._check_insertion()
         return True
 
-    async def query(self, mbr: dict, threshold: float) -> List[int]:
+    async def query(self, wkt_string: str) -> Tuple[bool, List[int]]:
         """
         根据给定的mbr进行查询
         """
-        # TODO: add check retired?
+        # check retired may ended up in an endless chasing
+        # if self.retired:
+        #     return False, [self.resolution + 1]
         # TODO: use threshold
         # TODO: 转换墨卡托投影
         res = set()
-        mbr = from_dict(MBR, mbr)
-        if self.segments is not None:
-            ids = self.segments.sindex.query(box(mbr.minX, mbr.minY, mbr.maxX, mbr.maxY))
-            if ids:
-                res.update(ids)
-        if self.cache:
-            for i in self.cache:
-                if box(mbr.minX, mbr.minY, mbr.maxX, mbr.maxY).intersects(
-                        LineString([(i.start.lng, i.start.lat), (i.end.lng, i.end.lat)])):
-                    res.add(i.id)
-        return list(res)
+        mbr_polygon = wkt.loads(wkt_string)
+        async with self.lock.reader_lock:
+            if self.segments is not None:
+                ids = self.segments.sindex.query(mbr_polygon)
+                if len(ids) > 0:
+                    res.update(self.segments.iloc[list(res)]["id"])
+            if self.cache:
+                for i in self.cache:
+                    if mbr_polygon.intersects(
+                            LineString([self.transformer.transform(i.start.lng, i.start.lat),
+                                        self.transformer.transform(i.end.lng, i.end.lat)])):
+                        res.add(i.id)
+            return True, list(res)
 
     async def _check_split(self):
         """
         查看是否要分裂
         """
-        if self._need_split():
+        if await self._need_split():
             self._do_insertion()
-            self.logger.info(
+            await self.logger.info(
                 f"Buffer: {len(self.cache) if self.cache else 0}, Tree: {len(self.segments) if self.segments is not None else 0}")
             # 1. 切分数据到7个子区块
             children_resolution: int = self.resolution + 1
@@ -201,16 +210,19 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
                 "mother": self.id.id,
                 "children": list(children)
             }
+
             if "8031fffffffffff" in children:
-                self.logger.warn("SHITTTTTTTTTTTTT")
+                await self.logger.warn("SHITTTTTTTTTTTTT")
             meta_proxy = ActorProxy.create('IndexMetaActor', ActorId("0"), IndexMetaInterface)
             resp: str = await meta_proxy.RegionSplit(data)
             self.retired = True
+            await self._state_manager.set_state(self.RETIRED_KRY, self.retired)
+            await self._state_manager.save_state()
 
             # 2. 初始化16个子区块
             for k, v in buckets.items():
                 await self._childbirth(k, v)
-            self.logger.info(f"{resp}, I'm retired")
+            await self.logger.info(f"{resp}, I'm retired")
 
     @staticmethod
     def split_h3_area(h: str, resolution: int) -> Set[str]:
@@ -225,6 +237,8 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
         proxy = ActorProxy.create('DistributedIndexActor', ActorId(h), DistributedIndexInterface)
         return await proxy.InitializeAsANewChildRegion(list(map(asdict, segments)))
 
-    def _need_split(self) -> bool:
-        l = len(self.segments) if self.segments is not None else 0
-        return self.resolution < 15 and l > SPLIT_THRESHOLD
+    async def _need_split(self) -> bool:
+        ratio = len(self.segments) if self.segments is not None else 0
+        if self.resolution == 15:
+            await self.logger.critical(f"{self.id.id}_No more cells left")
+        return self.resolution < 15 and ratio > SPLIT_THRESHOLD

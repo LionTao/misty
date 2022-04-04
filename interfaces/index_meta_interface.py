@@ -11,3 +11,7 @@ class IndexMetaInterface(ActorInterface):
     @actormethod(name="Query")
     async def query(self, data: dict) -> List[str]:
         ...
+
+    @actormethod(name="AgentQuery")
+    async def agent_query(self, wkt: str) -> List[str]:
+        ...
