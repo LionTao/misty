@@ -2,6 +2,9 @@ from typing import List, Dict
 
 import numpy as np
 import traj_dist.distance as tdist
+from aiologger import Logger
+from aiologger.formatters.base import Formatter
+from aiologger.levels import LogLevel
 from dacite import from_dict
 from dapr.actor import Actor, ActorId, ActorProxy
 from dapr.actor.runtime.context import ActorRuntimeContext
@@ -14,6 +17,8 @@ from interfaces.types import TrajectoryPoint
 class DistanceComputeActor(Actor, DistanceComputeInterface):
     def __init__(self, ctx: ActorRuntimeContext, actor_id: ActorId):
         super().__init__(ctx, actor_id)
+        self.logger = Logger.with_default_handlers(name=f"{self.__class__.__name__}_{self.id.id}", level=LogLevel.INFO,
+                                                   formatter=Formatter("%(name)s-%(asctime)s: %(message)s"))
 
     @staticmethod
     async def _get_trajectory_to_numpy(i: str) -> np.ndarray:
@@ -40,3 +45,7 @@ class DistanceComputeActor(Actor, DistanceComputeInterface):
             candidate: np.ndarray = await self._get_trajectory_to_numpy(candidate_id)
             res[candidate_id] = tdist.hausdorff(target_trajectory, candidate, "spherical")
         return res
+
+    async def _on_deactivate(self) -> None:
+        await self.logger.info("Deactivated")
+        await self.logger.shutdown()

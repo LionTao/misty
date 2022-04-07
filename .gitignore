@@ -153,3 +153,5 @@ cython_debug/
 
 *.out
 pid
+*.pdf
+test.ipynb

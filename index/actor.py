@@ -12,7 +12,10 @@ from aiologger.formatters.base import Formatter
 from aiologger.levels import LogLevel
 from dacite import from_dict
 from dapr.actor import Actor, ActorId, ActorProxy
+from dapr.actor.runtime._method_context import ActorMethodContext
 from dapr.actor.runtime.context import ActorRuntimeContext
+
+warnings.simplefilter(action='ignore', category=FutureWarning)
 from geopandas import GeoDataFrame
 from pyproj import Transformer
 from shapely import wkt
@@ -22,14 +25,12 @@ from interfaces.distributed_index_interface import DistributedIndexInterface
 from interfaces.index_meta_interface import IndexMetaInterface
 from interfaces.types import TrajectorySegment, TrajectoryPoint
 
-warnings.simplefilter(action='ignore', category=FutureWarning)
-
 # buffer里最大存储数量
-MAX_BUFFER_SIZE = os.getenv("MAX_BUFFER_SIZE", 200)
+MAX_BUFFER_SIZE = os.getenv("MAX_BUFFER_SIZE", 50)
 # buffer里数量:树里的数量
-TREE_INSERTION_THRESHOLD = os.getenv("TREE_INSERTION_THRESHOLD", 0.5)
+TREE_INSERTION_THRESHOLD = os.getenv("TREE_INSERTION_THRESHOLD", 0.2)
 # 分裂所需的树索引阈值
-SPLIT_THRESHOLD = os.getenv("SPLIT_THRESHOLD", 500)
+SPLIT_THRESHOLD = os.getenv("SPLIT_THRESHOLD", 2000)
 
 
 class DistributedIndexActor(Actor, DistributedIndexInterface):
@@ -41,6 +42,7 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
         super().__init__(ctx, actor_id)
 
         self.STATE_KEY = f"DistributedIndexActor_{self.id.id}"
+        self.BUFFER_KEY = f"DistributedIndexActor_{self.id.id}_buffer"
         self.RETIRED_KRY = f"DistributedIndexActor_{self.id.id}_retired"
 
         self.retired: bool = False
@@ -56,18 +58,23 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
         # str-tree索引
         self.segments: Optional[GeoDataFrame] = None
         # Buffer
-        self.cache: Optional[Set[TrajectorySegment]] = None
+        self.cache: Set[TrajectorySegment] = set()
 
         self.logger = Logger.with_default_handlers(name=f"DistributedIndex_{self.id.id}", level=LogLevel.INFO,
                                                    formatter=Formatter("%(name)s-%(asctime)s: %(message)s"))
 
         self.lock = aiorwlock.RWLock()
+        self.full = False
 
     async def _on_activate(self) -> None:
+        has_value, p = await self._state_manager.try_get_state(self.BUFFER_KEY)
+        if has_value:
+            val: Set[TrajectorySegment] = set(map(lambda x: from_dict(TrajectorySegment, x), p))
+            self.cache.update(val)
         has_value, p = await self._state_manager.try_get_state(self.STATE_KEY)
         if has_value:
-            val: List[TrajectorySegment] = list(map(lambda x: from_dict(TrajectorySegment, x), p))
-            self.cache = val
+            val: Set[TrajectorySegment] = set(map(lambda x: from_dict(TrajectorySegment, x), p))
+            self.cache.update(val)
             # self.logger.info("Got segments restored")
         # else:
         #     self.logger.info("No previous_segments available")
@@ -80,11 +87,14 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
         await self.logger.info(f"{self.id}_region activated")
 
     async def _on_deactivate(self) -> None:
-        self._do_insertion()
-        await self._state_manager.set_state(self.STATE_KEY, [asdict(i) for i in self.segments["obj"]])
+        await self.logger.info("Deactivated")
+        await self.logger.shutdown()
+
+    async def _on_post_actor_method(self, method_context: ActorMethodContext):
+        if self.segments is not None:
+            await self._state_manager.set_state(self.STATE_KEY, [asdict(i) for i in self.segments["obj"]])
         await self._state_manager.set_state(self.RETIRED_KRY, self.retired)
-        await self._state_manager.save_state()
-        await self.logger.info("State stored")
+        await self._state_manager.set_state(self.BUFFER_KEY, [asdict(i) for i in self.cache])
 
     async def accept_new_segment(self, segment: dict) -> Tuple[bool, int]:
         """
@@ -127,7 +137,7 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
             pass
         else:
             self.segments = gdf
-        self.cache = None
+        self.cache = set()
 
     def _cache_to_gdf(self) -> Optional[GeoDataFrame]:
         """
@@ -239,6 +249,8 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
 
     async def _need_split(self) -> bool:
         ratio = len(self.segments) if self.segments is not None else 0
-        if self.resolution == 15:
+        if self.resolution == 15 and not self.full:
             await self.logger.critical(f"{self.id.id}_No more cells left")
+            self.full = True
+            return False
         return self.resolution < 15 and ratio > SPLIT_THRESHOLD

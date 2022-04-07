@@ -1,4 +1,5 @@
 import asyncio
+import time
 import traceback
 from queue import Queue
 from typing import List, Tuple, Set
@@ -32,21 +33,26 @@ logger = Logger.with_default_handlers(name=f"Query agent", level=LogLevel.INFO,
 
 
 @app.get("/query-with-id/{target_trajectory_id}")
-async def query_with_id(target_trajectory_id: str, threshold: float, batch_size=10):
+async def query_with_id(target_trajectory_id: str, threshold: float, batch_size=3):
     try:
         # 拿到轨迹所有的点
+        before_target = time.perf_counter()
         target_home = ActorProxy.create('TrajectoryAssemblerActor', ActorId(target_trajectory_id),
                                         TrajectoryAssemblerInterface)
         target: List[TrajectoryPoint] = [from_dict(TrajectoryPoint, i) for i in await target_home.Query()]
         points: List[Tuple[float, float]] = [transformer.transform(i.lng, i.lat) for i in target]
         # 组成复合polygon
         areas: Polygon = LineString(points).buffer(threshold)
-        await logger.info(f"areas: {areas.wkt}")
+        after_target = time.perf_counter()
+        await logger.info(f"target: {after_target - before_target}s, areas: {areas.wkt}")
         # 送meta查询rtree
+        before_query = time.perf_counter()
         meta_proxy = ActorProxy.create('IndexMetaActor', ActorId("0"), IndexMetaInterface)
         candidate_regions: List[str] = await meta_proxy.AgentQuery(areas.wkt)
-        await logger.info(f"candidates regions: {candidate_regions}")
+        after_query = time.perf_counter()
+        await logger.info(f"regions tims:{after_query - before_query}s,  regions: {candidate_regions}")
         # 根据meta返回的index id调用query取得候选轨迹id
+        before_candidate = time.perf_counter()
         candidates_ids = set()
         q = Queue()
         [q.put(c) for c in candidate_regions]
@@ -60,8 +66,10 @@ async def query_with_id(target_trajectory_id: str, threshold: float, batch_size=
                 await logger.info(f"Failed, adding more cells")
                 more_cells: Set[str] = DistributedIndexActor.split_h3_area(r, partial_candidates[0])
                 [q.put(c) for c in more_cells]
+        after_candidate = time.perf_counter()
+        await logger.info(f"tid time: {after_candidate - before_candidate}s, tids: {candidates_ids}")
         # 发送compute计算距离
-        await logger.info(f"candidates tids: {candidates_ids}")
+        before_compute = time.perf_counter()
         coroutines = []
         # res=[]
         for idx, c in enumerate(chop(int(batch_size), candidates_ids)):
@@ -71,6 +79,9 @@ async def query_with_id(target_trajectory_id: str, threshold: float, batch_size=
                 "candidates": c
             }))
         res = await asyncio.gather(*coroutines)
+        after_compute = time.perf_counter()
+        await logger.info(
+            f"compute: {after_compute - before_compute}s, total: {after_compute - before_target}s")
         # 返回结果
         return res
     except Exception as e:

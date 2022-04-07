@@ -27,7 +27,7 @@ class TrajectoryAssemblerActor(Actor, TrajectoryAssemblerInterface):
 
         self.previous_point: Optional[TrajectoryPoint] = None
         self.trajectory: Optional[List[TrajectoryPoint]] = None
-        self.logger = Logger.with_default_handlers(name=f"TrajectoryAssembler_{self.id.id}", level=LogLevel.INFO,
+        self.logger = Logger.with_default_handlers(name=f"{self.__class__.__name__}_{self.id.id}", level=LogLevel.INFO,
                                                    formatter=Formatter("%(name)s-%(asctime)s: %(message)s"))
 
     async def query(self) -> List[dict]:
@@ -38,7 +38,10 @@ class TrajectoryAssemblerActor(Actor, TrajectoryAssemblerInterface):
             if self.previous_point:
                 p: TrajectoryPoint = from_dict(TrajectoryPoint, p)
                 prev = self.previous_point
-
+                dis = h3.point_dist((p.lat, p.lng), (prev.lat, prev.lng), unit='km')
+                if dis > 100:
+                    # 怪异错误点，直接剔除
+                    return True
                 # 发送到index模块
                 # try:
                 data = {
@@ -134,5 +137,5 @@ class TrajectoryAssemblerActor(Actor, TrajectoryAssemblerInterface):
         await self.logger.info(f"{self.id}_TrajectoryAssembler activated")
 
     async def _on_deactivate(self) -> None:
+        await self.logger.info("Deactivated")
         await self.logger.shutdown()
-        await self.logger.info("State backuped")

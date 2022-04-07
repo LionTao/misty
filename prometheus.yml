@@ -1,0 +1,45 @@
+global:
+  scrape_interval:     15s # By default, scrape targets every 15 seconds.
+
+# A scrape configuration containing exactly one endpoint to scrape:
+# Here it's Prometheus itself.
+scrape_configs:
+  - job_name: 'dapr'
+
+    # Override the global default and scrape targets from this job every 5 seconds.
+    scrape_interval: 5s
+
+    static_configs:
+      - targets: ['172.30.68.163:9090','172.30.68.163:9091','172.30.68.163:9092','172.30.68.163:9093','172.30.68.163:9094'] # Replace with Dapr metrics port if not default
+
+  # - job_name: 'dapr1'
+
+  #   # Override the global default and scrape targets from this job every 5 seconds.
+  #   scrape_interval: 5s
+
+  #   static_configs:
+  #     - targets: ['172.30.68.163:9091'] # Replace with Dapr metrics port if not default
+
+  # - job_name: 'dapr2'
+
+  #   # Override the global default and scrape targets from this job every 5 seconds.
+  #   scrape_interval: 5s
+
+  #   static_configs:
+  #     - targets: ['172.30.68.163:9092'] # Replace with Dapr metrics port if not default
+
+  # - job_name: 'dapr3'
+
+  #   # Override the global default and scrape targets from this job every 5 seconds.
+  #   scrape_interval: 5s
+
+  #   static_configs:
+  #     - targets: ['172.30.68.163:9093'] # Replace with Dapr metrics port if not default
+
+  # - job_name: 'dapr4'
+
+  #   # Override the global default and scrape targets from this job every 5 seconds.
+  #   scrape_interval: 5s
+
+  #   static_configs:
+  #     - targets: ['172.30.68.163:9094'] # Replace with Dapr metrics port if not default

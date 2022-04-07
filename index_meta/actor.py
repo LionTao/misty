@@ -73,7 +73,7 @@ class IndexMetaActor(Actor, IndexMetaInterface):
                 self.gdf.drop_duplicates().reset_index(drop=True)
                 # if "8031fffffffffff" in data['children'] or "8031fffffffffff" == data['mother']:
                 await self.logger.info(
-                    f"Split {data['mother']} to {children},len:{len(self.gdf)}, using: {time.perf_counter() - start}ms")
+                    f"Split {data['mother']} to {children},len:{len(self.gdf)}, using: {time.perf_counter() - start}s")
                 # self.logger.info(f"len:{len(self.gdf)}")
 
                 return 'SPLIT_RECEIVED'
