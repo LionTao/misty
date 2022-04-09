@@ -9,7 +9,7 @@ from index_meta.actor import IndexMetaActor
 
 ActorRuntime.set_actor_config(
     ActorRuntimeConfig(
-        actor_idle_timeout=timedelta(hours=10),
+        actor_idle_timeout=timedelta(hours=30),
         actor_scan_interval=timedelta(hours=1),
         drain_ongoing_call_timeout=timedelta(minutes=2),
         drain_rebalanced_actors=True,

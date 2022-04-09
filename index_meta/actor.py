@@ -1,3 +1,4 @@
+import json
 import time
 import traceback
 import warnings
@@ -26,7 +27,10 @@ import aiorwlock
 
 BOSS = h3.get_res0_indexes()
 
-INIT_RESOLUTION = 5
+with open("tests/parameters.json") as f:
+    INIT_RESOLUTION = json.load(f)["INIT_RESOLUTION"]
+
+print(f"{INIT_RESOLUTION=}", flush=True)
 
 
 class IndexMetaActor(Actor, IndexMetaInterface):
@@ -97,8 +101,8 @@ class IndexMetaActor(Actor, IndexMetaInterface):
             if len(start_res) == 0:
                 # await self.logger.info(f"start:{start} is orphan")
                 h = h3.geo_to_h3(start_lat, start_lng, INIT_RESOLUTION)
-                if h == "8031fffffffffff":
-                    await self.logger.warn("Spotted in start")
+                # if h == "8031fffffffffff":
+                #     await self.logger.warn("Spotted in start")
                 other = GeoDataFrame([{"h": h, "geometry": self.h3_to_box(h)}], crs="EPSG:3857")
                 async with self.locker.writer_lock:
                     self.gdf = self.gdf.append(other, ignore_index=True) if self.gdf is not None else other

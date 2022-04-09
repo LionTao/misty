@@ -1,4 +1,4 @@
-import os
+import json
 import traceback
 import warnings
 from collections import defaultdict
@@ -25,12 +25,18 @@ from interfaces.distributed_index_interface import DistributedIndexInterface
 from interfaces.index_meta_interface import IndexMetaInterface
 from interfaces.types import TrajectorySegment, TrajectoryPoint
 
-# buffer里最大存储数量
-MAX_BUFFER_SIZE = os.getenv("MAX_BUFFER_SIZE", 50)
-# buffer里数量:树里的数量
-TREE_INSERTION_THRESHOLD = os.getenv("TREE_INSERTION_THRESHOLD", 0.2)
-# 分裂所需的树索引阈值
-SPLIT_THRESHOLD = os.getenv("SPLIT_THRESHOLD", 2000)
+with open("tests/parameters.json") as f:
+    para: dict = json.load(f)
+    # buffer里最大存储数量
+    MAX_BUFFER_SIZE = para.get("MAX_BUFFER_SIZE", 50)
+    # buffer里数量:树里的数量
+    TREE_INSERTION_THRESHOLD = para.get("TREE_INSERTION_THRESHOLD", 0.2)
+    # 分裂所需的树索引阈值
+    SPLIT_THRESHOLD = para.get("SPLIT_THRESHOLD", 2000)
+
+print(f"{MAX_BUFFER_SIZE=}", flush=True)
+print(f"{TREE_INSERTION_THRESHOLD=}", flush=True)
+print(f"{SPLIT_THRESHOLD=}", flush=True)
 
 
 class DistributedIndexActor(Actor, DistributedIndexInterface):

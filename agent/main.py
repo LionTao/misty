@@ -50,7 +50,7 @@ async def query_with_id(target_trajectory_id: str, threshold: float, batch_size=
         meta_proxy = ActorProxy.create('IndexMetaActor', ActorId("0"), IndexMetaInterface)
         candidate_regions: List[str] = await meta_proxy.AgentQuery(areas.wkt)
         after_query = time.perf_counter()
-        await logger.info(f"regions tims:{after_query - before_query}s,  regions: {candidate_regions}")
+        await logger.info(f"regions time:{after_query - before_query}s,  regions: {candidate_regions}")
         # 根据meta返回的index id调用query取得候选轨迹id
         before_candidate = time.perf_counter()
         candidates_ids = set()
@@ -83,7 +83,14 @@ async def query_with_id(target_trajectory_id: str, threshold: float, batch_size=
         await logger.info(
             f"compute: {after_compute - before_compute}s, total: {after_compute - before_target}s")
         # 返回结果
-        return res
+        return {
+            "res": res,
+            "target": after_target - before_target,
+            "regions": after_query - before_query,
+            "tid": after_candidate - before_candidate,
+            "compute": after_compute - before_compute,
+            "time": time.time()
+        }
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(500, str(e))

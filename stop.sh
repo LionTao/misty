@@ -13,8 +13,8 @@ dapr uninstall --all
 docker stop jaeger
 docker rm jaeger
 
-docker stop prom
-docker rm prom
+# docker stop prom
+# docker rm prom
 
-docker stop grafana
-docker rm grafana
+# docker stop grafana
+# docker rm grafana
