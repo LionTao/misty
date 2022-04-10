@@ -190,7 +190,7 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
             if self.segments is not None:
                 ids = self.segments.sindex.query(mbr_polygon)
                 if len(ids) > 0:
-                    res.update(self.segments.iloc[list(res)]["id"])
+                    res.update(self.segments.iloc[list(ids)]["id"])
             if self.cache:
                 for i in self.cache:
                     if mbr_polygon.intersects(

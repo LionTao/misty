@@ -28,12 +28,12 @@ async def loop_task(arg):
     while True:
         if killer.is_kill_now:
             break
-        cpu = psutil.cpu_percent(2)
+        cpu = psutil.cpu_percent(5)
         mem = psutil.virtual_memory()[2]
         t = time.time()
         with open(f"tests/results/{arg[1]}_top_{t}.json", 'w') as f:
             json.dump({"cpu": cpu, "mem": mem, "time": t}, f)
-        await asyncio.sleep(5)
+        await asyncio.sleep(30)
 
 
 if __name__ == '__main__':

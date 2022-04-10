@@ -1,0 +1,30 @@
+# Copyright (c) Microsoft Corporation and Dapr Contributors.
+# Licensed under the MIT License.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compute
+  labels:
+    app: compute
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: compute
+  template:
+    metadata:
+      labels:
+        app: compute
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "compute"
+        dapr.io/app-port: "3000"
+    spec:
+      containers:
+      - name: compute
+        image: liontao/rtree:0.1  # EDIT HERE: Replace the image nmae with [docker registry]/demo_actor:latest
+        args: ["hypercorn", "compute.main:app","--bind","0.0.0.0:3000"]
+        ports:
+        - containerPort: 3000
+        imagePullPolicy: Never

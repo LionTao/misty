@@ -9,13 +9,13 @@ ulimit -t unlimited
 ulimit -m unlimited
 ulimit -v unlimited
 
-dapr init --from-dir /home/jctao20204227021/Downloads/daprbundle
+dapr init --from-dir /home/liontao/Downloads/daprbundle
 docker run -d --name jaeger \
   -e COLLECTOR_ZIPKIN_HOST_PORT=:9412 \
   -p 16686:16686 \
   -p 9412:9412 \
   jaegertracing/all-in-one:1.22
-sed -i "s@http://localhost:9411/api/v2/spans@http://localhost:9412/api/v2/spans@g" /home/jctao20204227021/.dapr/config.yaml
+sed -i "s@http://localhost:9411/api/v2/spans@http://localhost:9412/api/v2/spans@g" /home/liontao/.dapr/config.yaml
 docker run --name "dapr_zipkin" --restart always -d -p 9411:9411 openzipkin/zipkin
 docker run --name "dapr_redis" --restart always -d -p 6379:6379 redislabs/rejson
 

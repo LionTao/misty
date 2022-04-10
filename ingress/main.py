@@ -117,7 +117,7 @@ def run_test(fnames: List[int], res_fname: str):
     start = time.perf_counter()
     res = []
     for i in range(1, 5):
-        resp = get(f"http://localhost:3004/query-with-id/{i}?threshold=10000&batch_size=2")
+        resp = get(f"http://localhost:3302/query-with-id/{i}??threshold=100000&batch_size=2")
         res.append(resp.json())
     end = time.perf_counter()
     print(f"query using: {end - start}s")

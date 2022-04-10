@@ -1,0 +1,30 @@
+# Copyright (c) Microsoft Corporation and Dapr Contributors.
+# Licensed under the MIT License.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: index-meta
+  labels:
+    app: index-meta
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: index-meta
+  template:
+    metadata:
+      labels:
+        app: index-meta
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "index-meta"
+        dapr.io/app-port: "3000"
+    spec:
+      containers:
+      - name: index-meta
+        image: liontao/rtree:0.1  # EDIT HERE: Replace the image nmae with [docker registry]/demo_actor:latest
+        args: ["hypercorn", "index_meta.main:app","--bind","0.0.0.0:3000"]
+        ports:
+        - containerPort: 3000
+        imagePullPolicy: Never

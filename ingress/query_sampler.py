@@ -26,14 +26,13 @@ class GracefulKiller:
 
 async def loop_task(arg):
     killer = GracefulKiller()
-    res = []
     while True:
         if killer.is_kill_now:
             break
-        resp = get(f"http://localhost:3302/query-with-id/1?threshold=10000&batch_size=2")
+        resp = get(f"http://localhost:3302/query-with-id/1?threshold=100000&batch_size=2")
         with open(f"tests/results/{arg[1]}_query_{time.time()}.json", 'w') as f:
             json.dump(resp.json(), f)
-        await asyncio.sleep(5)
+        await asyncio.sleep(30)
 
 
 if __name__ == '__main__':
