@@ -13,52 +13,73 @@ sys.path.append(os.curdir)
 
 
 def file_name_creator():
-    trajectories = list(range(1, 151))
+    trajectories = list(range(1, 101))
     template = {
         "result_file_name": "test",
         "trajectories": trajectories,
         "INIT_RESOLUTION": 1,
-        "MAX_BUFFER_SIZE": 50,
+        "MAX_BUFFER_SIZE": 500,
         "TREE_INSERTION_THRESHOLD": 0.2,
         "SPLIT_THRESHOLD": 2000
     }
     settings = []
-    for m in [0, 1, 10, 100, 300, 500, 700]:
+    # settings = [
+    #     {
+    #         "result_file_name": "our_solution",
+    #         "trajectories": trajectories,
+    #         "INIT_RESOLUTION": 5,
+    #         "MAX_BUFFER_SIZE": 500,
+    #         "TREE_INSERTION_THRESHOLD": 0.2,
+    #         "SPLIT_THRESHOLD": 2000
+    #     },
+    #     {
+    #         "result_file_name": "plain",
+    #         "trajectories": trajectories,
+    #         "INIT_RESOLUTION": 0,
+    #         "MAX_BUFFER_SIZE": 0,
+    #         "TREE_INSERTION_THRESHOLD": 0,
+    #         "SPLIT_THRESHOLD": float('inf')
+    #     }
+    # ]
+    for m in [0, 2, 20, 200, 500, 700]:
+        # for m in [500]:
         temp = deepcopy(template)
         temp["MAX_BUFFER_SIZE"] = m
         temp[
-            "result_file_name"] = f'{temp["MAX_BUFFER_SIZE"]}_{temp["TREE_INSERTION_THRESHOLD"]}_{temp["SPLIT_THRESHOLD"]}'
+            "result_file_name"] = f'{temp["MAX_BUFFER_SIZE"]}_{temp["TREE_INSERTION_THRESHOLD"]}_{temp["SPLIT_THRESHOLD"]}_{temp["INIT_RESOLUTION"]}'
+        settings.append(temp)
+    for i in [0, 5, 10]:
+        temp = deepcopy(template)
+        temp["INIT_RESOLUTION"] = i
+        temp[
+            "result_file_name"] = f'{temp["MAX_BUFFER_SIZE"]}_{temp["TREE_INSERTION_THRESHOLD"]}_{temp["SPLIT_THRESHOLD"]}_{temp["INIT_RESOLUTION"]}'
         settings.append(temp)
     for k in [1000, 1500, 2000, 2500, 3000]:
         temp = deepcopy(template)
-        temp["TREE_INSERTION_THRESHOLD"] = k
+        temp["SPLIT_THRESHOLD"] = k
         temp[
-            "result_file_name"] = f'{temp["MAX_BUFFER_SIZE"]}_{temp["TREE_INSERTION_THRESHOLD"]}_{temp["SPLIT_THRESHOLD"]}'
+            "result_file_name"] = f'{temp["MAX_BUFFER_SIZE"]}_{temp["TREE_INSERTION_THRESHOLD"]}_{temp["SPLIT_THRESHOLD"]}_{temp["INIT_RESOLUTION"]}'
         settings.append(temp)
         temp = deepcopy(temp)
         temp["MAX_BUFFER_SIZE"] = 0
         temp[
-            "result_file_name"] = f'{temp["MAX_BUFFER_SIZE"]}_{temp["TREE_INSERTION_THRESHOLD"]}_{temp["SPLIT_THRESHOLD"]}'
+            "result_file_name"] = f'{temp["MAX_BUFFER_SIZE"]}_{temp["TREE_INSERTION_THRESHOLD"]}_{temp["SPLIT_THRESHOLD"]}_{temp["INIT_RESOLUTION"]}'
         settings.append(temp)
     for t in [0, 0.1, 0.3, 0.5, 0.9]:
         temp = deepcopy(template)
-        temp["SPLIT_THRESHOLD"] = t
+        temp["TREE_INSERTION_THRESHOLD"] = t
         temp[
-            "result_file_name"] = f'{temp["MAX_BUFFER_SIZE"]}_{temp["TREE_INSERTION_THRESHOLD"]}_{temp["SPLIT_THRESHOLD"]}'
-        settings.append(temp)
-        temp = deepcopy(temp)
-        temp["MAX_BUFFER_SIZE"] = 0
-        temp[
-            "result_file_name"] = f'{temp["MAX_BUFFER_SIZE"]}_{temp["TREE_INSERTION_THRESHOLD"]}_{temp["SPLIT_THRESHOLD"]}'
+            "result_file_name"] = f'{temp["MAX_BUFFER_SIZE"]}_{temp["TREE_INSERTION_THRESHOLD"]}_{temp["SPLIT_THRESHOLD"]}_{temp["INIT_RESOLUTION"]}'
         settings.append(temp)
 
     # plain rtree
     temp = deepcopy(template)
-    template["SPLIT_THRESHOLD"] = float('inf')
-    template["TREE_INSERTION_THRESHOLD"] = 0
-    template["MAX_BUFFER_SIZE"] = 0
-    template[
-        "result_file_name"] = f'{template["MAX_BUFFER_SIZE"]}_{template["TREE_INSERTION_THRESHOLD"]}_{template["SPLIT_THRESHOLD"]}'
+    temp["SPLIT_THRESHOLD"] = float('inf')
+    temp["TREE_INSERTION_THRESHOLD"] = 0
+    temp["MAX_BUFFER_SIZE"] = 0
+    temp["INIT_RESOLUTION"] = 0
+    temp[
+        "result_file_name"] = f'{temp["MAX_BUFFER_SIZE"]}_{temp["TREE_INSERTION_THRESHOLD"]}_{temp["SPLIT_THRESHOLD"]}_{temp["INIT_RESOLUTION"]}'
     settings.append(temp)
 
     return settings
@@ -144,8 +165,11 @@ def stop(p_list: List[subprocess.Popen[str]]):
 
 
 def experiment():
-    for setting in tqdm(file_name_creator()):
+    settings = file_name_creator()
+    print(f"total:{len(settings)} groups")
+    for setting in tqdm(settings):
         if os.path.exists(f"tests/results/{setting['result_file_name']}.json"):
+            print(f"skipping {setting['result_file_name']}")
             continue
         with open("tests/parameters.json", 'w') as f:
             json.dump(setting, f)

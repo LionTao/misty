@@ -8,6 +8,8 @@ from aiologger.formatters.base import Formatter
 from pyproj import Transformer
 from shapely import wkt
 
+from interfaces.accumulator_interface import AccumulatorInterface
+
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 import h3
@@ -15,7 +17,7 @@ import numpy as np
 from aiologger import Logger
 from aiologger.levels import LogLevel
 from dacite import from_dict
-from dapr.actor import Actor, ActorId
+from dapr.actor import Actor, ActorId, ActorProxy
 from dapr.actor.runtime.context import ActorRuntimeContext
 from geopandas import GeoDataFrame
 from shapely.geometry import box, Polygon
@@ -55,7 +57,6 @@ class IndexMetaActor(Actor, IndexMetaInterface):
         return has_value
 
     async def region_split(self, data: dict) -> str:
-        # TODO: fix double splitting
         async with self.locker.writer_lock:
             try:
                 start = time.perf_counter()
@@ -75,6 +76,8 @@ class IndexMetaActor(Actor, IndexMetaInterface):
                 self.gdf = self.gdf.append(new_data, ignore_index=True) if self.gdf is not None else GeoDataFrame(
                     new_data)
                 self.gdf.drop_duplicates().reset_index(drop=True)
+                accumulator_proxy = ActorProxy.create('AccumulatorActor', ActorId("0"), AccumulatorInterface)
+                await accumulator_proxy.MetaAdd()
                 # if "8031fffffffffff" in data['children'] or "8031fffffffffff" == data['mother']:
                 await self.logger.info(
                     f"Split {data['mother']} to {children},len:{len(self.gdf)}, using: {time.perf_counter() - start}s")
@@ -106,6 +109,8 @@ class IndexMetaActor(Actor, IndexMetaInterface):
                 other = GeoDataFrame([{"h": h, "geometry": self.h3_to_box(h)}], crs="EPSG:3857")
                 async with self.locker.writer_lock:
                     self.gdf = self.gdf.append(other, ignore_index=True) if self.gdf is not None else other
+                    accumulator_proxy = ActorProxy.create('AccumulatorActor', ActorId("0"), AccumulatorInterface)
+                    await accumulator_proxy.MetaAdd()
                 res.add(h)
             else:
                 async with self.locker.writer_lock:
@@ -121,6 +126,8 @@ class IndexMetaActor(Actor, IndexMetaInterface):
                 other = GeoDataFrame([{"h": h, "geometry": self.h3_to_box(h)}], crs="EPSG:3857")
                 async with self.locker.writer_lock:
                     self.gdf = self.gdf.append(other, ignore_index=True) if self.gdf is not None else other
+                    accumulator_proxy = ActorProxy.create('AccumulatorActor', ActorId("0"), AccumulatorInterface)
+                    await accumulator_proxy.MetaAdd()
                 res.add(h)
             else:
                 async with self.locker.writer_lock:

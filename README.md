@@ -1,10 +1,29 @@
-# Parallel Distributed Buffered Streaming Trajectory R-Tree
+# Misty
 
-TODO:
+Code repository for paper "Misty: Microservice-based Streaming Trajectory Similarity Search"
 
-- [ ] async call 并行化
-- [ ] 墨卡托投影改造-计算距离先用墨卡托转化然后使用平面距离计算
-    - [x] index模组的STRTree
-    - [ ] compute的距离计算
+## Quick start
 
-remember to change ip in promethus.yml
+```shell
+conda env create -f env.yml
+conda activate misty
+python tests/test.py
+```
+
+## Dataset
+
+We use a selected subset of T-Drive dataset presented in `data/filtered` folder. The preprocessing code can be found in
+`preprocess.ipynb`
+
+## Module list
+
+![framework](./framework.png)
+
+| Module name in framework | Folder name                  |
+|--------------------------|------------------------------|
+| Point Stream | [ingress](./ingress/)         |
+| Assembler | [assembler](./assemble/)     |
+| Index | [index](./index/)            |
+| Coordinator | [coordinator](./index_meta/) |
+| Executor | [executor](./compute/)       |
+| Qyery Agent | [agent](./agent/)            |

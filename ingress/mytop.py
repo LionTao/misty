@@ -24,16 +24,16 @@ class GracefulKiller:
 
 
 async def loop_task(arg):
-    killer = GracefulKiller()
+    # killer = GracefulKiller()
     while True:
-        if killer.is_kill_now:
-            break
-        cpu = psutil.cpu_percent(5)
+        # if killer.is_kill_now:
+        #     break
+        cpu = psutil.cpu_percent(10)
         mem = psutil.virtual_memory()[2]
         t = time.time()
         with open(f"tests/results/{arg[1]}_top_{t}.json", 'w') as f:
             json.dump({"cpu": cpu, "mem": mem, "time": t}, f)
-        await asyncio.sleep(30)
+        await asyncio.sleep(60)
 
 
 if __name__ == '__main__':

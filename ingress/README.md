@@ -1,3 +1,5 @@
-# 消息中间件
+# Data generator
 
-负责从消息队列拿消息并调用assemble actor
+Mimic a message queue due to Dapr actor cannot subscribe MQ for now.
+
+Read trajectory points from data files and send to assembler actors.

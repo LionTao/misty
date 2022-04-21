@@ -4,18 +4,26 @@ set -euo pipefail
 
 ulimit -n 64000
 ulimit -u 64000
-ulimit -f unlimited
-ulimit -t unlimited
-ulimit -m unlimited
-ulimit -v unlimited
+#ulimit -f unlimited
+#ulimit -t unlimited
+#ulimit -m unlimited
+#ulimit -v unlimited
 
+mkdir -p logs
+mkdir -p tests/results
+
+# change path to your dapr bundle
 dapr init --from-dir /home/liontao/Downloads/daprbundle
 docker run -d --name jaeger \
   -e COLLECTOR_ZIPKIN_HOST_PORT=:9412 \
   -p 16686:16686 \
   -p 9412:9412 \
   jaegertracing/all-in-one:1.22
-sed -i "s@http://localhost:9411/api/v2/spans@http://localhost:9412/api/v2/spans@g" /home/liontao/.dapr/config.yaml
+
+# change zipkin to jaeger for better performance
+# EDIT path of your $HOME
+sed -i "s@http://localhost:9411/api/v2/spans@http://localhost:9412/api/v2/spans@g" "$HOME"/.dapr/config.yaml
+
 docker run --name "dapr_zipkin" --restart always -d -p 9411:9411 openzipkin/zipkin
 docker run --name "dapr_redis" --restart always -d -p 6379:6379 redislabs/rejson
 
@@ -36,29 +44,40 @@ docker run --name "dapr_redis" --restart always -d -p 6379:6379 redislabs/rejson
 # echo $! >>pid
 
 touch pid
+
+# start assemblers
 for i in {1..20}; do
   let p=3000+$i
   dapr run --app-id assemble --app-port "$p" -- hypercorn --bind "0.0.0.0:$p" assemble.main:app >"logs/assemble$i.log" 2>&1 &
   echo $! >>pid
 done
 
+# start distributed index
 for i in {1..30}; do
   let p=3100+$i
   dapr run --app-id index --app-port "$p" -- hypercorn --bind "0.0.0.0:$p" index.main:app >"logs/index$i.log" 2>&1 &
   echo $! >>pid
 done
 
+# start coordinator
 dapr run --app-id index-meta --app-port 3301 -- hypercorn --bind "0.0.0.0:3301" index_meta.main:app >"logs/index-meta.log" 2>&1 &
 echo $! >>pid
 
+# start executor
 for i in {1..5}; do
   let p=3200+$i
   dapr run --app-id compute --app-port "$p" -- hypercorn --bind "0.0.0.0:$p" compute.main:app >"logs/compute$i.log" 2>&1 &
   echo $! >>pid
 done
 
+# start query agent
 dapr run --app-id agent --app-port 3302 -- hypercorn --bind 0.0.0.0:3302 agent.main:app >logs/agent.log 2>&1 &
 echo $! >>pid
 
+# accumulator is for some experiment metrics
+dapr run --app-id accumulator --app-port 3303 -- hypercorn --bind 0.0.0.0:3303 accumulator.main:app >logs/accumulator.log 2>&1 &
+echo $! >>pid
+
+# start data generator
 sleep 10
 dapr run --app-id ingress python3 ingress/main.py

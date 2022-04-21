@@ -15,6 +15,8 @@ from dapr.actor import Actor, ActorId, ActorProxy
 from dapr.actor.runtime._method_context import ActorMethodContext
 from dapr.actor.runtime.context import ActorRuntimeContext
 
+from interfaces.accumulator_interface import AccumulatorInterface
+
 warnings.simplefilter(action='ignore', category=FutureWarning)
 from geopandas import GeoDataFrame
 from pyproj import Transformer
@@ -129,20 +131,24 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
         看看是不是要进行合并
         """
         if self._need_insertion():
-            self._do_insertion()
+            await self._do_insertion()
         await self._check_split()
 
-    def _do_insertion(self):
+    async def _do_insertion(self):
         """
         进行合并
         """
         gdf = self._cache_to_gdf()
         if self.segments is not None and gdf is not None:
             self.segments = self.segments.append(gdf, ignore_index=True)
+            accumulator_proxy = ActorProxy.create('AccumulatorActor', ActorId("0"), AccumulatorInterface)
+            await accumulator_proxy.Add()
         elif self.segments is not None:
             pass
         else:
             self.segments = gdf
+            accumulator_proxy = ActorProxy.create('AccumulatorActor', ActorId("0"), AccumulatorInterface)
+            await accumulator_proxy.Add()
         self.cache = set()
 
     def _cache_to_gdf(self) -> Optional[GeoDataFrame]:
@@ -204,10 +210,10 @@ class DistributedIndexActor(Actor, DistributedIndexInterface):
         查看是否要分裂
         """
         if await self._need_split():
-            self._do_insertion()
+            await self._do_insertion()
             await self.logger.info(
                 f"Buffer: {len(self.cache) if self.cache else 0}, Tree: {len(self.segments) if self.segments is not None else 0}")
-            # 1. 切分数据到7个子区块
+            # 1. 切分数据到16个子区块
             children_resolution: int = self.resolution + 1
             children: set = self.split_h3_area(self.h, children_resolution)
             buckets: Dict[str, List[TrajectorySegment]] = defaultdict(lambda: list())
