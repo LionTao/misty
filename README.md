@@ -1,6 +1,8 @@
-# Misty
+## Overview
 
-Code repository for paper "Misty: Microservice-based Streaming Trajectory Similarity Search"
+Implementation code for our under-review paper **"Misty: Microservice-based Streaming Trajectory Similarity Search"**. 
+
+Misty is a microservice-based real-time processing framework for streaming trajectory similarity search query. The entire framework is developed based on Dapr. As a future direction, we are working on Misty's extension to spatial join and query plan optimization for higher throughput and more elastic index scaling.
 
 ## Quick start
 
@@ -27,3 +29,6 @@ We use a selected subset of T-Drive dataset presented in `data/filtered` folder.
 | Coordinator | [coordinator](./index_meta/) |
 | Executor | [executor](./compute/)       |
 | Qyery Agent | [agent](./agent/)            |
+
+
+
