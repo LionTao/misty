@@ -1,6 +1,10 @@
+# Misty: Microservice-based Streaming Trajectory Similarity Search
+
+UPDATE: spark-based solutio was uploaded at [spark folder](./spark/)
+
 ## Overview
 
-Implementation code for our under-review paper **"Misty: Microservice-based Streaming Trajectory Similarity Search"**. 
+Implementation code for our under-review paper **"Misty: Microservice-based Streaming Trajectory Similarity Search"**.
 
 Misty is a microservice-based real-time processing framework for streaming trajectory similarity search query. The entire framework is developed based on Dapr. As a future direction, we are working on Misty's extension to spatial join and query plan optimization for higher throughput and more elastic index scaling.
 
